@@ -17,7 +17,6 @@ namespace PicMaster
         FastBitmap _main;
         Bitmap _target;
         Graphics _targetDC;
-        Point _pos;
 
         double MeasureError(Rectangle blockRect, FastBitmap block)
         {
@@ -139,25 +138,15 @@ namespace PicMaster
             _targetDC = Graphics.FromImage(_target);
         }
 
-        int p = 0; // delme
+        // Block Position Coordinates
+        int p = 0;
         int d = 0;
         int r = 0;
         int pc = 1;
- //       int p
-
-        bool GetNextBlockRect(out Rectangle rect)
+        int cnt = 0;
+ 
+        void IncrementBlockPosition()
         {
-            rect = new Rectangle();
-
-            if (p == 4)
-                return false;
-
-            if (pc);
-            rect.X = _settings.sizeBlock.Width * (p % 22);
-            rect.Y = _settings.sizeBlock.Height * (p / 22);
-            rect.Width = _settings.sizeBlock.Width;
-            rect.Height = _settings.sizeBlock.Height;
-
             p++;
             if (p == pc)
             {
@@ -170,16 +159,55 @@ namespace PicMaster
                     pc += 2;
                 }
             }
+        }
 
-            return true;
+        bool GetNextBlockRect(out Rectangle rect)
+        {
+            cnt++;
+            rect = new Rectangle();
+
+            rect.Width = _settings.sizeBlock.Width;
+            rect.Height = _settings.sizeBlock.Height;
+
+            Point center = new Point(_main.GetBitmap().Size.Width / 2, _main.GetBitmap().Size.Height / 2);
+
+            bool res = false;
+            int attempts = 0;
+            do
+            {
+                attempts++;
+                switch (d)
+                {
+                    case 0:
+                        rect.X = center.X - _settings.sizeBlock.Width * (r + 1 - p);
+                        rect.Y = center.Y - _settings.sizeBlock.Height * (r + 1);
+                        break;
+                    case 1:
+                        rect.X = center.X + _settings.sizeBlock.Width * (r);
+                        rect.Y = center.Y - _settings.sizeBlock.Height * (r + 1 - p);
+                        break;
+                    case 2:
+                        rect.X = center.X + _settings.sizeBlock.Width * (r - p);
+                        rect.Y = center.Y + _settings.sizeBlock.Height * (r);
+                        break;
+                    case 3:
+                        rect.X = center.X - _settings.sizeBlock.Width * (r + 1);
+                        rect.Y = center.Y + _settings.sizeBlock.Height * (r - p);
+                        break;
+                }
+
+                if (Rectangle.Intersect(rect, new Rectangle(new Point(0, 0),_target.Size)) == rect)
+                    res = true;
+
+                IncrementBlockPosition();
+            } while (!(res || attempts > 4 + 8 * (r + 1)));
+
+            return res;
         }
 
         public void Process(Settings settings)
         {
             _settings = settings;
-            _pos = new Point(0, 0);
-
-            CultureInfo oldCulture = System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
             LoadBlocks();
             LoadMain();
@@ -189,7 +217,7 @@ namespace PicMaster
             Rectangle blockRect;
             while (GetNextBlockRect(out blockRect))
             {
-                System.Console.Write("{0} ", p);
+                System.Console.Write("{0:0000} ", cnt);
                 FastBitmap block = FindBestBlock(blockRect);
                 _targetDC.DrawImage(block.GetBitmap(), blockRect,
                     new Rectangle(new Point(0, 0), block.GetBitmap().Size), GraphicsUnit.Pixel);
@@ -198,8 +226,6 @@ namespace PicMaster
             System.Console.WriteLine("\n Total Time {0} seconds", (DateTime.Now - start).TotalSeconds);
 
             _target.Save(_settings.pathTarget);
-
-            System.Threading.Thread.CurrentThread.CurrentCulture = oldCulture;
         }
     }
 }
