@@ -124,6 +124,8 @@ namespace PicMaster
                 _blocks.Add(new FastBitmap(bmp));
                 if (_settings.sizeBlock == new Size(0, 0))
                     _settings.sizeBlock = bmp.Size;
+
+                BitmapStream.Dispose();
             }
         }
 
@@ -131,7 +133,7 @@ namespace PicMaster
         {
 
             Stream BitmapStream = File.Open(_settings.pathMainImage, System.IO.FileMode.Open);
-            Image img = Image.FromStream(BitmapStream);
+            Image img = Image.FromStream(BitmapStream, true, false);
             Bitmap bmp = new Bitmap(img);
             _main = new FastBitmap(bmp);
             _target = new Bitmap(bmp.Size.Width, bmp.Size.Height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
