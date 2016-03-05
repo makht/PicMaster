@@ -140,72 +140,6 @@ namespace PicMaster
             _targetDC = Graphics.FromImage(_target);
         }
 
-        // Block Position Coordinates
-        int p = 0;
-        int d = 0;
-        int r = 0;
-        int pc = 1;
-        int cnt = 0;
- 
-        void IncrementBlockPosition()
-        {
-            p++;
-            if (p == pc)
-            {
-                p = 0;
-                d++;
-                if (d == 4)
-                {
-                    d = 0;
-                    r++;
-                    pc += 2;
-                }
-            }
-        }
-
-        bool GetNextBlockRect(out Rectangle rect)
-        {
-            cnt++;
-            rect = new Rectangle();
-
-            rect.Width = _settings.sizeBlock.Width;
-            rect.Height = _settings.sizeBlock.Height;
-
-            Point center = new Point(_main.GetBitmap().Size.Width / 2, _main.GetBitmap().Size.Height / 2);
-
-            bool res = false;
-            int attempts = 0;
-            do
-            {
-                attempts++;
-                switch (d)
-                {
-                    case 0:
-                        rect.X = center.X - _settings.sizeBlock.Width * (r + 1 - p);
-                        rect.Y = center.Y - _settings.sizeBlock.Height * (r + 1);
-                        break;
-                    case 1:
-                        rect.X = center.X + _settings.sizeBlock.Width * (r);
-                        rect.Y = center.Y - _settings.sizeBlock.Height * (r + 1 - p);
-                        break;
-                    case 2:
-                        rect.X = center.X + _settings.sizeBlock.Width * (r - p);
-                        rect.Y = center.Y + _settings.sizeBlock.Height * (r);
-                        break;
-                    case 3:
-                        rect.X = center.X - _settings.sizeBlock.Width * (r + 1);
-                        rect.Y = center.Y + _settings.sizeBlock.Height * (r - p);
-                        break;
-                }
-
-                if (Rectangle.Intersect(rect, new Rectangle(new Point(0, 0),_target.Size)) == rect)
-                    res = true;
-
-                IncrementBlockPosition();
-            } while (!(res || attempts > 4 + 8 * (r + 1)));
-
-            return res;
-        }
 
         public void Process(Settings settings)
         {
@@ -213,13 +147,14 @@ namespace PicMaster
 
             LoadBlocks();
             LoadMain();
+            Spirale spirale = new Spirale(_main.GetBitmap().Size, settings.sizeBlock);
 
             DateTime start = DateTime.Now;
 
             Rectangle blockRect;
-            while (GetNextBlockRect(out blockRect))
+            while (spirale.GetNextBlockRect(out blockRect))
             {
-                System.Console.Write("{0:0000} ", cnt);
+                System.Console.Write("{0:0000} ", spirale.BlockNumber);
                 FastBitmap block = FindBestBlock(blockRect);
                 _targetDC.DrawImage(block.GetBitmap(), blockRect,
                     new Rectangle(new Point(0, 0), block.GetBitmap().Size), GraphicsUnit.Pixel);
