@@ -24,7 +24,8 @@ namespace PicMaster
 
         public int Count
         {
-            get { return (szArea.Width / (szBlock.Width * 2) * 2) * (szArea.Height / (szBlock.Width * 2) * 2); }
+            get { return (szArea.Width / (szBlock.Width * 2) * 2) *
+                    (szArea.Height / (szBlock.Width * 2) * 2); }
         }
 
         // Block Position Coordinates
@@ -32,7 +33,7 @@ namespace PicMaster
         int d = 0;
         int r = 0;
         int pc = 1;
-        int blockNumber = 0;
+        int blockNumber = -1;
 
         void IncrementBlockPosition()
         {

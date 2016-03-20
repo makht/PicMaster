@@ -7,13 +7,34 @@ using System.Globalization;
 using System.IO;
 using System.Drawing;
 using System.Threading;
+using System.Threading.Tasks;
+
 
 namespace PicMaster
 {
     class Processor
     {
+        class Block
+        {
+            public bool IsActive;
+            public FastBitmap fbmp;
+
+            public Block(FastBitmap fb)
+            {
+                IsActive = true;
+                fbmp = fb;
+            }
+        }
+        List<Block> _blocks = new List<Block>();
+
+        public class Position
+        {
+            public Rectangle rc;
+            public List<double> errors;
+        }
+        List<Position> positions;
+
         Settings _settings;
-        List<FastBitmap> _blocks = new List<FastBitmap>();
         FastBitmap _main;
         Bitmap _target;
         Graphics _targetDC;
@@ -39,76 +60,67 @@ namespace PicMaster
             return error;
         }
 
-        int _ep;
-
-        public int GetNextBlockIndex()
+        void MeasureAllErrors()
         {
-            return Interlocked.Increment(ref _ep);
-        }
-
-        class Work
-        {
-            public Processor parent;
-            public List<double> errors;
-            public List<FastBitmap> blocks;
-            public Rectangle blockRect;
-            public void DoMoreWork()
+            Parallel.For(0, positions.Count, (i, state) =>
             {
-                for (; ; )
+                for (int e = 0; e < _blocks.Count; e++)
                 {
-                    int i = parent.GetNextBlockIndex();
-                    if (i >= blocks.Count)
-                        break;
-                        errors[i] = parent.MeasureError(blockRect, blocks[i]);
+                    positions[i].errors[e] = MeasureError(positions[i].rc, _blocks[e].fbmp);
                 }
-            }
+                System.Console.Write("{0:0000} ", i);
+            });
         }
 
-        List<double> MeasureErrors(Rectangle blockRect)
+        FastBitmap FindBestBlock(int pos)
         {
-            List<double> errors = new List<double>(_blocks.Count);
-            for (int i = 0; i < _blocks.Count; i++)
-                errors.Add(0);
-            _ep = -1;
-
-            List<Thread> threads = new List<Thread>();
-            for (int i = 0; i < 8; i++)
-            {
-                Work w = new Work();
-                w.parent = this;
-                w.blocks = _blocks;
-                w.errors = errors;
-                w.blockRect = blockRect;
-                ThreadStart threadDelegate = new ThreadStart(w.DoMoreWork);
-                threads.Add(new Thread(threadDelegate));
-                threads[i].Start();
-            }
-
-            foreach (Thread thread in threads)
-                thread.Join();
-
-            return errors;
-        }
-
-        FastBitmap FindBestBlock(Rectangle blockRect)
-        {
-            double minError = -1;
-            int best = 0;
-            List<double> errors = MeasureErrors(blockRect);
+            double bestError = double.MaxValue;
+            int best = -1;
+            double mnError = double.MaxValue;
+            int mn = -1;
             for (int i = 0; i < _blocks.Count; i++)
             {
-                if (errors[i] == 0)
+                if (positions[pos].errors[i] == 0)
                     System.Console.WriteLine("ZeroError!");
-                if (minError == -1 || errors[i] < minError)
+                if (positions[pos].errors[i] < mnError)
                 {
-                    best = i;
-                    minError = errors[i];
+                    mnError = positions[pos].errors[i];
+                    mn = i;
+                }
+                    if (positions[pos].errors[i] < bestError)
+                {
+                    bool isBetter = false;
+                    for (int j = pos + 1; j < positions.Count; j++)
+                    {
+                        if (positions[j].errors[i] < positions[pos].errors[i])
+                        {
+                            bool isBest = true;
+                            for (int k = 0; k < _blocks.Count; k++)
+                            {
+                                if (positions[j].errors[k] < positions[j].errors[i])
+                                    isBest = false;
+                            }
+                            if (isBest)
+                            {
+                                isBetter = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!isBetter)
+                    {
+                        best = i;
+                        bestError = positions[pos].errors[i];
+                    }
                 }
             }
 
-            FastBitmap res = _blocks[best];
-            _blocks.RemoveAt(best);
+            if (best == -1)
+                best = mn;
+            FastBitmap res = _blocks[best].fbmp;
             res.UnlockBitmap();
+            for (int j = pos + 1; j < positions.Count; j++)
+                positions[j].errors[best] = double.MaxValue;
 
             return res;
         }
@@ -121,7 +133,7 @@ namespace PicMaster
                 Stream BitmapStream = File.Open(strFilePath, System.IO.FileMode.Open);
                 Image img = Image.FromStream(BitmapStream);
                 Bitmap bmp = new Bitmap(img);
-                _blocks.Add(new FastBitmap(bmp));
+                _blocks.Add(new Block(new FastBitmap(bmp)));
                 if (_settings.sizeBlock == new Size(0, 0))
                     _settings.sizeBlock = bmp.Size;
 
@@ -145,18 +157,28 @@ namespace PicMaster
         {
             _settings = settings;
 
+            DateTime start = DateTime.Now;
+
             LoadBlocks();
             LoadMain();
             Spirale spirale = new Spirale(_main.GetBitmap().Size, settings.sizeBlock);
-
-            DateTime start = DateTime.Now;
-
-            Rectangle blockRect;
-            while (spirale.GetNextBlockRect(out blockRect))
+            positions = new List<Position>(spirale.Count);
+            for (int i = 0; i < spirale.Count; i++)
             {
-                System.Console.Write("{0:0000} ", spirale.BlockNumber);
-                FastBitmap block = FindBestBlock(blockRect);
-                _targetDC.DrawImage(block.GetBitmap(), blockRect,
+                positions.Add(new Position());
+                positions[i].errors = new List<double>(_blocks.Count);
+                spirale.GetNextBlockRect(out positions[i].rc);
+                for (int j = 0; j < _blocks.Count; j++)
+                    positions[i].errors.Add(0);
+            }
+
+            MeasureAllErrors();
+
+            for (int i = 0; i < positions.Count; i++)
+            {
+                System.Console.Write("{0:0000} ", i);
+                FastBitmap block = FindBestBlock(i);
+                _targetDC.DrawImage(block.GetBitmap(), positions[i].rc,
                     new Rectangle(new Point(0, 0), block.GetBitmap().Size), GraphicsUnit.Pixel);
             }
 
